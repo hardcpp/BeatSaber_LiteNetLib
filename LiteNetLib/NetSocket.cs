@@ -174,7 +174,7 @@ namespace LiteNetLib
             }
         }
 
-        public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress, bool ipv6)
+        public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress, bool ipv6, ThreadPriority priority = ThreadPriority.Normal)
         {
             if (IsActive())
                 return false;
@@ -202,7 +202,8 @@ namespace LiteNetLib
             _threadv4 = new Thread(ReceiveLogic)
             {
                 Name = "SocketThreadv4(" + LocalPort + ")",
-                IsBackground = true
+                IsBackground = true,
+                Priority = priority
             };
             _threadv4.Start(_udpSocketv4);
 
@@ -231,7 +232,8 @@ namespace LiteNetLib
                 _threadv6 = new Thread(ReceiveLogic)
                 {
                     Name = "SocketThreadv6(" + LocalPort + ")",
-                    IsBackground = true
+                    IsBackground = true,
+                    Priority = priority
                 };
                 _threadv6.Start(_udpSocketv6);
             }
@@ -386,7 +388,7 @@ namespace LiteNetLib
                     case SocketError.NoBufferSpaceAvailable:
                     case SocketError.Interrupted:
                         return 0;
-                    case SocketError.MessageSize: //do nothing              
+                    case SocketError.MessageSize: //do nothing
                         break;
                     default:
                         NetDebug.WriteError("[S]" + ex);

@@ -112,7 +112,7 @@ namespace LiteNetLib
                 return;
             }
 
-            //check relevance     
+            //check relevance
             if (windowRel >= _windowSize)
             {
                 NetDebug.Write("[PA]Old acks");
@@ -139,11 +139,13 @@ namespace LiteNetLib
                     if ((acksData[currentByte] & (1 << currentBit)) == 0)
                     {
 #if DEBUG
-                        Peer.Statistics.PacketLoss++;
+                        Peer.Statistics.IncrementPacketLoss();
+                        Peer.NetManager.Statistics.IncrementPacketLoss();
 #else
-                        if (Peer.NetManager.EnableStatistics) 
+                        if (Peer.NetManager.EnableStatistics)
                         {
-                            Peer.Statistics.PacketLoss++;
+                            Peer.Statistics.IncrementPacketLoss();
+                            Peer.NetManager.Statistics.IncrementPacketLoss();
                         }
 #endif
 
@@ -154,7 +156,7 @@ namespace LiteNetLib
 
                     if (pendingSeq == _localWindowStart)
                     {
-                        //Move window                
+                        //Move window
                         _localWindowStart = (_localWindowStart + 1) % NetConstants.MaxSequence;
                     }
 

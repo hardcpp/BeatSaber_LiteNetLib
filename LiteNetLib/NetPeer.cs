@@ -26,7 +26,7 @@ namespace LiteNetLib
     internal enum ConnectRequestResult
     {
         None,
-        P2PConnection, //when peer connecting
+        P2PLose, //when peer connecting
         Reconnection,  //when peer was connected
         NewConnection  //when peer was disconnected
     }
@@ -61,7 +61,7 @@ namespace LiteNetLib
         private int _timeSinceLastPacket;
         private long _remoteDelta;
 
-        //Common            
+        //Common
         private readonly NetPacketPool _packetPool;
         private readonly object _flushLock = new object();
         private readonly object _sendLock = new object();
@@ -81,7 +81,7 @@ namespace LiteNetLib
                 _pongPacket.ConnectionNumber = value;
             }
         }
- 
+
         //Channels
         private readonly Queue<NetPacket> _unreliableChannel;
         private readonly BaseChannel[] _channels;
@@ -211,7 +211,7 @@ namespace LiteNetLib
             _mergeData = new NetPacket(PacketProperty.Merged, NetConstants.MaxPacketSize);
             _pongPacket = new NetPacket(PacketProperty.Pong, 0);
             _pingPacket = new NetPacket(PacketProperty.Ping, 0) {Sequence = 1};
-           
+
             _unreliableChannel = new Queue<NetPacket>(64);
             _headChannel = null;
             _holdedFragments = new Dictionary<ushort, IncomingFragments>();
@@ -267,7 +267,7 @@ namespace LiteNetLib
         }
 
         //"Connect to" constructor
-        internal NetPeer(NetManager netManager, IPEndPoint remoteEndPoint, int id, byte connectNum, NetDataWriter connectData) 
+        internal NetPeer(NetManager netManager, IPEndPoint remoteEndPoint, int id, byte connectNum, NetDataWriter connectData)
             : this(netManager, remoteEndPoint, id)
         {
             _connectTime = DateTime.UtcNow.Ticks;
@@ -275,7 +275,7 @@ namespace LiteNetLib
             ConnectionNum = connectNum;
 
             //Make initial packet
-            _connectRequestPacket = NetConnectRequestPacket.Make(connectData, _connectTime);
+            _connectRequestPacket = NetConnectRequestPacket.Make(connectData, remoteEndPoint.Serialize(), _connectTime);
             _connectRequestPacket.ConnectionNumber = connectNum;
 
             //Send request
@@ -489,10 +489,10 @@ namespace LiteNetLib
         }
 
         private void SendInternal(
-            byte[] data, 
-            int start, 
-            int length, 
-            byte channelNumber, 
+            byte[] data,
+            int start,
+            int length,
+            byte channelNumber,
             DeliveryMethod deliveryMethod,
             object userData)
         {
@@ -513,7 +513,7 @@ namespace LiteNetLib
                 channel = CreateChannel((byte)(channelNumber*4 + (byte)deliveryMethod));
             }
 
-            //Prepare  
+            //Prepare
             NetDebug.Write("[RS]Packet: " + property);
 
             //Check fragmentation
@@ -693,8 +693,8 @@ namespace LiteNetLib
                 var fragments = incomingFragments.Fragments;
 
                 //Error check
-                if (p.FragmentPart >= fragments.Length || 
-                    fragments[p.FragmentPart] != null || 
+                if (p.FragmentPart >= fragments.Length ||
+                    fragments[p.FragmentPart] != null ||
                     p.ChannelId != incomingFragments.ChannelId)
                 {
                     _packetPool.Recycle(p);
@@ -716,7 +716,7 @@ namespace LiteNetLib
 
                 //unreliable to save header space
                 NetPacket resultingPacket = _packetPool.GetWithProperty(
-                    PacketProperty.Unreliable, 
+                    PacketProperty.Unreliable,
                     incomingFragments.TotalSize);
 
                 int firstFragmentSize = fragments[0].Size - NetConstants.FragmentedHeaderTotalSize;
@@ -829,16 +829,28 @@ namespace LiteNetLib
             //current or new request
             switch (_connectionState)
             {
-                //P2P case or just ID update
+                //P2P case
                 case ConnectionState.Outgoing:
-                    //change connect id if newer
-                    if (connRequest.ConnectionTime >= _connectTime)
+                    //fast check
+                    if (connRequest.ConnectionTime < _connectTime)
                     {
-                        //Change connect id
-                        _connectTime = connRequest.ConnectionTime;
-                        ConnectionNum = connRequest.ConnectionNumber;
+                        return ConnectRequestResult.P2PLose;
                     }
-                    return ConnectRequestResult.P2PConnection;
+                    //slow rare case check
+                    else if (connRequest.ConnectionTime == _connectTime)
+                    {
+                        var remoteBytes = EndPoint.Serialize();
+                        var localBytes = connRequest.TargetAddress;
+                        for (int i = remoteBytes.Size-1; i >= 0; i--)
+                        {
+                            byte rb = remoteBytes[i];
+                            if (rb == localBytes[i])
+                                continue;
+                            if (rb < localBytes[i])
+                                return ConnectRequestResult.P2PLose;
+                        }
+                    }
+                    break;
 
                 case ConnectionState.Connected:
                     //Old connect request
@@ -857,9 +869,7 @@ namespace LiteNetLib
                 case ConnectionState.Disconnected:
                 case ConnectionState.ShutdownRequested:
                     if (connRequest.ConnectionTime >= _connectTime)
-                    {
                         return ConnectRequestResult.NewConnection;
-                    }
                     break;
             }
             return ConnectRequestResult.None;
@@ -956,8 +966,8 @@ namespace LiteNetLib
                     if(_connectionState == ConnectionState.ShutdownRequested)
                         _connectionState = ConnectionState.Disconnected;
                     _packetPool.Recycle(packet);
-                    break;            
-                
+                    break;
+
                 default:
                     NetDebug.WriteError("Error! Unexpected packet type: " + packet.Property);
                     break;
@@ -982,8 +992,8 @@ namespace LiteNetLib
 
             if (NetManager.EnableStatistics)
             {
-                Statistics.PacketsSent++;
-                Statistics.BytesSent += (ulong)bytesSent;
+                Statistics.IncrementPacketsSent();
+                Statistics.AddBytesSent(bytesSent);
             }
 
             _mergePos = 0;
@@ -1002,8 +1012,8 @@ namespace LiteNetLib
 
                 if (NetManager.EnableStatistics)
                 {
-                    Statistics.PacketsSent++;
-                    Statistics.BytesSent += (ulong)bytesSent;
+                    Statistics.IncrementPacketsSent();
+                    Statistics.AddBytesSent(bytesSent);
                 }
 
                 return;

@@ -323,14 +323,14 @@ namespace LiteNetLib.Utils
                 Property = property;
                 PropertyType = propertyType;
             }
-            public override void Read(T inf, NetDataReader r) { Property.SetValue(inf, Enum.ToObject(PropertyType, r.GetByte()), null); }
+            public override void Read(T inf, NetDataReader r) { Property.SetValue(inf, System.Enum.ToObject(PropertyType, r.GetByte()), null); }
             public override void Write(T inf, NetDataWriter w) { w.Put((byte)Property.GetValue(inf, null)); }
         }
 
         private class EnumIntSerializer<T> : EnumByteSerializer<T>
         {
             public EnumIntSerializer(PropertyInfo property, Type propertyType) : base(property, propertyType) { }
-            public override void Read(T inf, NetDataReader r) { Property.SetValue(inf, Enum.ToObject(PropertyType, r.GetInt()), null); }
+            public override void Read(T inf, NetDataReader r) { Property.SetValue(inf, System.Enum.ToObject(PropertyType, r.GetInt()), null); }
             public override void Write(T inf, NetDataWriter w) { w.Put((int)Property.GetValue(inf, null)); }
         }
 
@@ -467,7 +467,7 @@ namespace LiteNetLib.Utils
                 FastCall<T> serialzer = null;
                 if (propertyType.IsEnum)
                 {
-                    var underlyingType = Enum.GetUnderlyingType(propertyType);
+                    var underlyingType = System.Enum.GetUnderlyingType(propertyType);
                     if (underlyingType == typeof(byte))
                         serialzer = new EnumByteSerializer<T>(property, propertyType);
                     else if (underlyingType == typeof(int))
